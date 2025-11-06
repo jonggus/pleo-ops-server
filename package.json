@@ -1,0 +1,12 @@
+{
+  "name": "pleo-ops-server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=20" }
+}
+

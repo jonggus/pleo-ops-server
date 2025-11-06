@@ -1,4 +1,9 @@
-node_modules/
-.env
+# frontend
 .DS_Store
 Thumbs.db
+*.log
+.env
+# 빌드 툴 쓰게 되면
+dist/
+build/
+node_modules/

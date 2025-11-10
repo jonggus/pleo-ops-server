@@ -16,10 +16,8 @@ const allowed = (process.env.ALLOWED_ORIGIN || "")
   .map(s => s.trim())
   .filter(Boolean);
 
-app.use(cors({
-  origin: allowed.length ? allowed : true,
-  credentials: true,
-}));
+app.use(cors({ origin: (process.env.ALLOWED_ORIGIN || "*").split(","),
+                credentials: true }));
 
 app.use(express.json());
 app.use(fileUpload({ useTempFiles: true, tempFileDir: "/tmp" }));
@@ -27,7 +25,7 @@ app.use(fileUpload({ useTempFiles: true, tempFileDir: "/tmp" }));
 app.get("/health", (req, res) => res.json({ ok: true, ts: Date.now() }));
 app.use("/api/estimate", estimateRouter);
 
-const PORT = Number(process.env.PORT) || 10000; // Render가 PORT를 넣어줌
+const PORT = Number(process.env.PORT) || 8888; // Render가 PORT를 넣어줌
 
 const start = async () => {
   try {

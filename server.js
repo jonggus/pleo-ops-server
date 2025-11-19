@@ -29,12 +29,12 @@ const PORT = Number(process.env.PORT) || 8888; // Render가 PORT를 넣어줌
 
 const start = async () => {
   try {
-    await connectDb(); // Mongo 연결 실패해도 throw하지 않게 했다면 OK
-    app.listen(PORT, "0.0.0.0", () => {
+    await connectDb();
+    app.listen(PORT, () => {
       console.log(`Server running on ${PORT}`);
     });
   } catch (err) {
-    console.error(err);
+    console.error("Failed to start server:", err);
     process.exit(1);
   }
 };

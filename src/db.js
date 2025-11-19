@@ -9,7 +9,7 @@ export const connectDb = async () => {
     return;
   }
 
-  // 이미 연결되어 있으면 다시 연결하지 않음
+  // 이미 연결되어 있으면 재연결 안 함
   if (mongoose.connection.readyState >= 1) {
     return;
   }

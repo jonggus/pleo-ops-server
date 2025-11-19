@@ -1,10 +1,11 @@
 // server.js
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import fileUpload from "express-fileupload";
-import { connectDb } from "./src/db.js";
+import { config as dotenvConfig } from "dotenv";
+import { connectDb } from "./src/db.js";  // ✅ 이 줄
 import estimateRouter from "./src/routes/estimate.js";
+
 
 dotenv.config();
 

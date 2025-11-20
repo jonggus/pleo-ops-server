@@ -14,6 +14,20 @@ const estimateSchema = new mongoose.Schema(
     weightPerCarton: { type: Number, required: true },
     totalWeightKg: { type: Number, required: true },
 
+    // ✅ 작업 위치 (인천항/공항/신항/경기권 등)
+    workLocation: {
+      type: String,
+      enum: ["INCHEON_PORT", "INCHEON_AIRPORT", "INCHEON_NEW_PORT", "GYEONGGI"],
+      required: true,
+    },
+
+    // ✅ 물품 종류/위험도
+    itemCategory: {
+      type: String,
+      enum: ["NORMAL", "FRAGILE", "HEAVY", "HIGH_VALUE"],
+      default: "NORMAL",
+    },
+
     contact: {
       name: { type: String, required: true },
       phone: { type: String, required: true },
@@ -26,7 +40,7 @@ const estimateSchema = new mongoose.Schema(
     fees: {
       baseFee: { type: Number, required: true },
       cartonFee: { type: Number, required: true },
-      adjRate: { type: Number, required: true },
+      adjRate: { type: Number, required: true }, // 룰+AI 최종
       totalFee: { type: Number, required: true },
     },
 
@@ -36,9 +50,19 @@ const estimateSchema = new mongoose.Schema(
       adjRate: { type: Number, default: 0 },
       comment: { type: String, default: "" },
     },
+
+    // (선택) 나중에 화면에서 보여주기 좋게 룰 가중치 쪼개서 저장하고 싶으면:
+    ruleBreakdown: {
+      weightAdj: { type: Number, default: 0 },
+      urgencyAdj: { type: Number, default: 0 },
+      locationAdj: { type: Number, default: 0 },
+      itemAdj: { type: Number, default: 0 },
+      volumeAdj: { type: Number, default: 0 },
+    },
   },
   { timestamps: true }
 );
+
 
 const Estimate =
   mongoose.models.Estimate || mongoose.model("Estimate", estimateSchema);

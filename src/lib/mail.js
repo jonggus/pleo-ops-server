@@ -10,7 +10,7 @@ export async function sendEstimateMail(to, subject, html) {
   }
 
   // "a@naver.com,b@gmail.com" -> ["a@naver.com", "b@gmail.com"]
-  const toList = to.split("8753ljh@naver.com,plleo@naver.com").map((v) => v.trim()).filter(Boolean);
+  const toList = to.split(",").map((v) => v.trim()).filter(Boolean);
 
   return resend.emails.send({
     // Resend 기본 테스트용 from

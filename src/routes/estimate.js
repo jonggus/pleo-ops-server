@@ -2,6 +2,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { getAiAdjustment } from "../lib/ai.js";
+import { sendEstimateMail } from "../lib/mail.js";
 
 const router = Router();
 
@@ -20,22 +21,20 @@ const estimateSchema = new mongoose.Schema(
     },
 
     memo: { type: String },
-    // 나중에 Cloudinary 붙이면 사용
     attachmentUrl: { type: String },
 
     fees: {
       baseFee: { type: Number, required: true },
       cartonFee: { type: Number, required: true },
-      adjRate: { type: Number, required: true }, // 룰 + AI 최종 조정률
+      adjRate: { type: Number, required: true },
       totalFee: { type: Number, required: true },
     },
 
     leadTimeDays: { type: Number, required: true },
 
-    // ✅ AI 관련 필드
     ai: {
-      adjRate: { type: Number, default: 0 }, // AI 추가/감액 비율
-      comment: { type: String, default: "" }, // AI 코멘트
+      adjRate: { type: Number, default: 0 },
+      comment: { type: String, default: "" },
     },
   },
   { timestamps: true }
@@ -115,7 +114,6 @@ router.post("/", async (req, res) => {
       }
     } catch (e) {
       console.error("AI adjust error:", e);
-      // AI 실패해도 서비스는 돌아가야 하니까 조용히 0으로 진행
     }
 
     const totalAdjRate = ruleAdjRate + aiAdjRate;
@@ -150,6 +148,55 @@ router.post("/", async (req, res) => {
 
     console.log("Estimate saved:", doc._id.toString());
 
+    // === 💌 이메일 내용 생성 ===
+    const html = `
+      <h2>새로운 AI 자동 견적 요청이 접수되었습니다</h2>
+
+      <h3>고객 정보</h3>
+      <p><b>담당자명:</b> ${contactName}</p>
+      <p><b>연락처:</b> ${contactPhone}</p>
+      <p><b>이메일:</b> ${contactEmail}</p>
+
+      <h3>작업 정보</h3>
+      <p><b>작업 수량:</b> ${w}</p>
+      <p><b>카톤 수량:</b> ${c}</p>
+      <p><b>카톤당 무게:</b> ${kg} kg</p>
+      <p><b>총 중량:</b> ${totalWeightKg} kg</p>
+      <p><b>메모:</b> ${memo || "(없음)"}</p>
+
+      <h3>AI 자동견적 결과</h3>
+      <p><b>기본 작업비:</b> ${baseFee.toLocaleString()}원</p>
+      <p><b>카톤비:</b> ${cartonFee.toLocaleString()}원</p>
+      <p><b>룰 조정률:</b> ${(ruleAdjRate * 100).toFixed(1)}%</p>
+      <p><b>AI 조정률:</b> ${(aiAdjRate * 100).toFixed(1)}%</p>
+      <p><b>합산 조정률:</b> ${(totalAdjRate * 100).toFixed(1)}%</p>
+      <p><b>총 견적 비용:</b> ${totalFee.toLocaleString()}원</p>
+      <p><b>작업 소요일:</b> 약 ${leadTimeDays}일</p>
+
+      <h3>AI 의견</h3>
+      <p>${aiComment || "(없음)"}</p>
+
+      <hr />
+      <p>플레오 보수작업 자동견적 시스템</p>
+    `;
+
+    // === 💌 메일 발송 ===
+    const to =
+      process.env.ESTIMATE_MAIL_TO || process.env.SMTP_USER; // COMPANY_MAIL 대신 ESTIMATE_MAIL_TO 사용
+
+    try {
+      console.log("📧 메일 발송 시도... to =", to);
+      await sendEstimateMail(
+        to,
+        "📌 새로운 AI 자동 견적 요청이 도착했습니다",
+        html
+      );
+      console.log("📧 견적 이메일 전송 완료");
+    } catch (emailErr) {
+      console.error("📧 이메일 오류:", emailErr);
+      // 이메일 실패해도 견적 API는 성공 응답 보내도록 유지
+    }
+
     // === 클라이언트로 응답 ===
     return res.json({
       ok: true,
@@ -158,9 +205,9 @@ router.post("/", async (req, res) => {
         totalWeightKg,
         baseFee,
         cartonFee,
-        ruleAdjRate,   // 룰 기반 조정률
-        aiAdjRate,     // AI 조정률
-        totalAdjRate,  // 합산
+        ruleAdjRate,
+        aiAdjRate,
+        totalAdjRate,
         totalFee,
         leadTimeDays,
         aiComment,
@@ -175,9 +222,3 @@ router.post("/", async (req, res) => {
 });
 
 export default router;
-
-await sendEstimateMail(
-  process.env.COMPANY_MAIL,
-  "📌 새로운 AI 자동 견적 요청이 도착했습니다",
-  html
-);

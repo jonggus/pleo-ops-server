@@ -175,3 +175,9 @@ router.post("/", async (req, res) => {
 });
 
 export default router;
+
+await sendEstimateMail(
+  process.env.COMPANY_MAIL,
+  "📌 새로운 AI 자동 견적 요청이 도착했습니다",
+  html
+);

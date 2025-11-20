@@ -72,6 +72,7 @@ router.post("/", async (req, res) => {
   try {
     const {
       workQty,
+      workLocation,
       cartonQty,
       weightPerCarton,
       contactName,
@@ -145,30 +146,42 @@ router.post("/", async (req, res) => {
     const leadTimeDays = totalWeightKg > 1000 ? 3 : 2;
 
     // === DB 저장 ===
-    const doc = await Estimate.create({
-      workQty: w,
-      cartonQty: c,
-      weightPerCarton: kg,
-      totalWeightKg,
-      contact: {
-        name: contactName,
-        phone: contactPhone,
-        email: contactEmail,
-      },
-      memo,
-      attachmentUrl: "",
-      fees: {
-        baseFee,
-        cartonFee,
-        adjRate: totalAdjRate,
-        totalFee,
-      },
-      leadTimeDays,
-      ai: {
-        adjRate: aiAdjRate,
-        comment: aiComment,
-      },
-    });
+const doc = await Estimate.create({
+  workQty: w,
+  cartonQty: c,
+  weightPerCarton: kg,
+  totalWeightKg,
+
+  // 👉 추가: 제품/작업 관련 필드들
+  workLocation,     // required: true
+  productType,      // optional
+  urgency,          // optional
+  refInfo,          // optional
+
+  contact: {
+    name: contactName,
+    phone: contactPhone,
+    email: contactEmail,
+  },
+
+  memo,
+  attachmentUrl: "",
+
+  fees: {
+    baseFee,
+    cartonFee,
+    adjRate: totalAdjRate,
+    totalFee,
+  },
+
+  leadTimeDays,
+
+  ai: {
+    adjRate: aiAdjRate,
+    comment: aiComment,
+  },
+});
+
 
     console.log("Estimate saved:", doc._id.toString());
 

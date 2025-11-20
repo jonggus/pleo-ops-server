@@ -1,26 +1,22 @@
 // src/lib/mail.js
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
-export const mailer = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,                // 예: smtp.naver.com
-  port: Number(process.env.SMTP_PORT || 465), // 465
-  secure: process.env.SMTP_SECURE === "true", // "true" 문자열이면 true
-  auth: {
-    user: process.env.SMTP_USER,              // 네이버 메일주소
-    pass: process.env.SMTP_PASS,              // 네이버 로그인 비번
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// 이 함수가 바로 estimate.js에서 쓸 함수야
 export async function sendEstimateMail(to, subject, html) {
   if (!to) {
     console.warn("sendEstimateMail called without 'to' address");
     return;
   }
 
-  return mailer.sendMail({
-    from: `"플레오 자동견적" <${process.env.SMTP_USER}>`,
-    to,        // "a@naver.com,b@gmail.com" 이런 형태도 가능
+  // "a@naver.com,b@gmail.com" -> ["a@naver.com", "b@gmail.com"]
+  const toList = to.split("8753ljh@naver.com,plleo@naver.com").map((v) => v.trim()).filter(Boolean);
+
+  return resend.emails.send({
+    // Resend 기본 테스트용 from
+    // (도메인 연결 전까진 이걸 써도 메일은 잘 옴)
+    from: "플레오 견적 <onboarding@resend.dev>",
+    to: toList,
     subject,
     html,
   });

@@ -46,7 +46,7 @@ app.get("/health", (req, res) => res.json({ ok: true, ts: Date.now() }));
 // 견적 API
 app.use("/api/estimate", estimateRouter);
 
-const PORT = Number(process.env.PORT) || 8080; // Render에서 PORT 주입
+const PORT = process.env.PORT || 10000;
 
 const start = async () => {
   try {

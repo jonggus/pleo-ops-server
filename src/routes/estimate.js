@@ -263,7 +263,7 @@ router.post("/", async (req, res) => {
     const totalAdjRate = ruleAdjRate + aiAdjRate;
     // ruleFee에는 이미 룰 조정/최소비용/냉동 프리미엄까지 반영
     const totalFee = Math.round(ruleFee * (1 + aiAdjRate));
-    const leadTimeDays = totalWeightKg > 1000 ? 3 : 2;
+    const leadTimeDays = Math.max(1, Math.ceil(w / 30000));
 
     // === DB 저장 ===
     const doc = await Estimate.create({
@@ -332,21 +332,23 @@ router.post("/", async (req, res) => {
       <p>플레오 보수작업 자동견적 시스템</p>
     `;
 
-    // === 💌 메일 발송 ===
-    const to = process.env.ESTIMATE_MAIL_TO || process.env.SMTP_USER;
+     // === 💌 메일 발송 ===
+      const to = process.env.ESTIMATE_MAIL_TO || process.env.SMTP_USER;
+      const subject = "📌 새로운 AI 자동 견적 요청이 도착했습니다";
 
-    try {
-      console.log("📧 메일 발송 시도... to =", to);
-      await sendEstimateMail(
-        to,
-        "📌 새로운 AI 자동 견적 요청이 도착했습니다",
-        html
-      );
-      console.log("📧 견적 이메일 전송 완료");
-    } catch (emailErr) {
-      console.error("📧 이메일 오류:", emailErr);
-      // 이메일 실패해도 API 응답은 성공으로
-    }
+      console.log("[mail] about to send", { to, subject });
+
+      try {
+        const mailRes = await sendEstimateMail(to, subject, html);
+        console.log("[mail] send result:", mailRes);
+
+        console.log("📧 견적 이메일 전송 완료");
+      }          
+      catch (emailErr) {
+        console.error("📧 이메일 오류:", emailErr);
+        // 메일 실패해도 API는 성공 처리 가능
+      }
+
 
     // === 클라이언트로 응답 ===
     return res.json({

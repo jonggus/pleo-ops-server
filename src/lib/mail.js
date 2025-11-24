@@ -5,19 +5,25 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendEstimateMail(to, subject, html) {
   if (!to) {
-    console.warn("sendEstimateMail called without 'to' address");
-    return;
+    console.warn("[mail] sendEstimateMail called without 'to'");
+    return { ok: false, reason: "no_to" };
   }
 
-  // "a@naver.com,b@gmail.com" -> ["a@naver.com", "b@gmail.com"]
-  const toList = to.split(",").map((v) => v.trim()).filter(Boolean);
+  const toList = to.split(",").map(v => v.trim()).filter(Boolean);
 
-  return resend.emails.send({
-    // Resend 기본 테스트용 from
-    // (도메인 연결 전까진 이걸 써도 메일은 잘 옴)
-    from: "플레오 견적 <onboarding@resend.dev>",
-    to: toList,
-    subject,
-    html,
-  });
+  try {
+    const result = await resend.emails.send({
+      from: "플레오 견적 <onboarding@resend.dev>",
+      to: toList,
+      subject,
+      html,
+    });
+
+    console.log("[mail] Resend result:", result);
+    return { ok: true, result };
+  } catch (err) {
+    console.error("[mail] Resend error:", err);
+    return { ok: false, error: err?.message || err };
+  }
 }
+

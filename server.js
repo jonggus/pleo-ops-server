@@ -6,11 +6,10 @@ import { connectDb } from "./src/db.js";
 import estimateRouter from "./src/routes/estimate.js";
 import adminKakaoRouter from "./src/routes/adminKakao.js";
 
-
-app.use("/admin/kakao", adminKakaoRouter);
-
+// 1) 환경변수 먼저 로드
 dotenv.config();
 
+// 2) 앱 인스턴스 생성
 const app = express();
 
 // ALLOWED_ORIGIN 예시 (.env)
@@ -20,7 +19,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGIN || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// CORS 설정
+// 3) CORS 설정
 app.use(
   cors({
     origin(origin, callback) {
@@ -36,6 +35,35 @@ app.use(
     credentials: true,
   })
 );
+
+// 4) 바디 파서
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 5) 헬스체크
+app.get("/health", (req, res) => res.json({ ok: true, ts: Date.now() }));
+
+// 6) 관리자 카카오 OAuth (Refresh Token 발급용)
+app.use("/admin/kakao", adminKakaoRouter);
+
+// 7) 견적 API
+app.use("/api/estimate", estimateRouter);
+
+const PORT = process.env.PORT || 10000;
+
+const start = async () => {
+  try {
+    await connectDb();
+    app.listen(PORT, () => {
+      console.log(`Server running on ${PORT}`);
+    });
+  } catch (err) {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  }
+};
+
+start();
 
 // 바디 파서
 app.use(express.json());

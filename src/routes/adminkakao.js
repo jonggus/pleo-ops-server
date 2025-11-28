@@ -14,7 +14,7 @@ const {
 const TOKEN_URL = "https://kauth.kakao.com/oauth/token";
 
 /**
- * 1) 관리자 로그인 시작
+ * 1) 관리자 로그인
  * 예: /admin/kakao/auth?role=owner
  */
 router.get("/auth", (req, res) => {

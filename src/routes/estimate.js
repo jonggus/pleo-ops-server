@@ -203,7 +203,7 @@ router.post("/", async (req, res) => {
     const totalWeightKg = c * kg;
 
     // === 1차 룰 기반 ===
-    const {
+    let {
       baseFee,
       cartonFee,
       transportFee,
@@ -224,17 +224,34 @@ router.post("/", async (req, res) => {
 
     // 1) 창고 위치가 인천항이 아닌 경우: 교통비 안내
     if (!/인천항/.test(workLocation)) {
-      notices.push("교통비가 발생할 수 있습니다.");
+      notices.push("추가로 교통비가 발생할 수 있습니다.");
     }
 
-    // 2) 작업 방식이 박음질인 경우: 견적 2배 및 안내문구
+    // 2) 작업 방식에 따른 추가 로직
     const method = (workMethod || "").trim();
     const isSewing =
       method === "박음질" || /박음질/.test(method) || /봉제|재봉/.test(method);
+    const isEtc =
+      method === "기타" || /기타/.test(method) || /입회/.test(method);
 
+    // 2-1) 박음질: 개당 400원, 최소 20만원 적용
     if (isSewing) {
-      ruleFee = Math.round(ruleFee * 2); // 기존 룰 견적의 약 2배
-      notices.push("미싱 사용료 별도 발생");
+      const sewingUnit = 400;
+      baseFee = w * sewingUnit;
+      cartonFee = 0; // 박음질은 개당 단가 기준으로 처리
+      ruleAdjRate = 0; // 별도 가중률 없이 단순 단가 적용
+      ruleFee = baseFee;
+
+      if (ruleFee < 200000) {
+        ruleFee = 200000;
+      }
+
+      notices.push("박음질 작업 미싱 사용료는 별도 입니다.");
+    }
+
+    // 2-2) 기타(입회 등) 안내 문구
+    if (isEtc) {
+      notices.push("입회비용은 80,000원 입니다.");
     }
 
     // === 2차 AI 조정 ===
@@ -265,7 +282,13 @@ router.post("/", async (req, res) => {
     }
 
     const totalAdjRate = ruleAdjRate + aiAdjRate;
-    const totalFee = Math.round(ruleFee * (1 + aiAdjRate));
+    let totalFee = Math.round(ruleFee * (1 + aiAdjRate));
+
+    // 박음질 작업의 경우, 최종 견적도 최소 20만원 보장
+    if (isSewing && totalFee < 200000) {
+      totalFee = 200000;
+    }
+
     const leadTimeDays = Math.max(1, Math.ceil(w / 30000));
 
     // === DB 저장 ===
@@ -307,9 +330,7 @@ router.post("/", async (req, res) => {
       console.error("Kakao memo send error:", err);
     });
 
-
     // === 카카오 알림 (관리자/사장님에게 알림 보내기) ===
-    // 필요 시 ../lib/kakaoAdminMemo.js 에서 구현한 함수가 호출됩니다.
     try {
       await sendKakaoAdminMemo(doc);
     } catch (kakaoErr) {

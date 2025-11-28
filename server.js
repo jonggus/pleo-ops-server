@@ -49,32 +49,7 @@ app.use("/admin/kakao", adminKakaoRouter);
 // 7) 견적 API
 app.use("/api/estimate", estimateRouter);
 
-const PORT = process.env.PORT || 10000;
-
-const start = async () => {
-  try {
-    await connectDb();
-    app.listen(PORT, () => {
-      console.log(`Server running on ${PORT}`);
-    });
-  } catch (err) {
-    console.error("Failed to start server:", err);
-    process.exit(1);
-  }
-};
-
-start();
-
-// 바디 파서
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// 헬스체크
-app.get("/health", (req, res) => res.json({ ok: true, ts: Date.now() }));
-
-// 견적 API
-app.use("/api/estimate", estimateRouter);
-
+// 8) 포트 (※ 여기 딱 한 번만 선언)
 const PORT = process.env.PORT || 10000;
 
 const start = async () => {

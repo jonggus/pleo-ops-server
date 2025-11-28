@@ -2,7 +2,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { getAiAdjustment } from "../lib/ai.js";
-import { sendEstimateMail } from "../lib/mail.js";
+import { sendKakaoAdminMemo } from "../lib/kakaoAdminMemo.js";
 
 const router = Router();
 
@@ -19,6 +19,9 @@ const estimateSchema = new mongoose.Schema(
     workLocation: { type: String, required: true },
     productType: { type: String },
 
+    // 작업 방식: 스티커 / 박음질 / 도장 / 기타(입회 등)
+    workMethod: { type: String },
+
     urgency: { type: String, default: "normal" },
     refInfo: { type: String },
 
@@ -29,12 +32,14 @@ const estimateSchema = new mongoose.Schema(
     },
 
     memo: { type: String },
-    attachmentUrl: { type: String },
+
+    // 안내 문구들 (교통비 가능성, 미싱 사용료 등)
+    notices: { type: [String], default: [] },
 
     fees: {
       baseFee: { type: Number, required: true },
       cartonFee: { type: Number, required: true },
-      transportFee: { type: Number, required: true, default: 0 },  // ★ 추가됨
+      transportFee: { type: Number, required: true, default: 0 },
       adjRate: { type: Number, required: true },
       totalFee: { type: Number, required: true },
     },
@@ -134,13 +139,10 @@ function calcRuleFee({
   }
 
   // --------------------------------------------
-  // ⑥ 평택항 교통비 (+100,000)
+  // ⑥ 교통비: 평택항/경기권 로직 제거
+  //     (transportFee는 항상 0, 안내 문구만 별도로 처리)
   // --------------------------------------------
-  let transportFee = 0;
-  if (/평택항/.test(workLoc) || /경기권/.test(workLoc)) {
-    transportFee = 100000;
-  }
-  ruleFee += transportFee;
+  const transportFee = 0;
 
   // --------------------------------------------
   // ⑦ 최소 요금 (인천항 8만, 공항 9만)
@@ -165,6 +167,7 @@ router.post("/", async (req, res) => {
       weightPerCarton,
       workLocation,
       productType,
+      workMethod, // 스티커 / 박음질 / 도장 / 기타
       urgency,
       refInfo,
       contactName,
@@ -200,16 +203,39 @@ router.post("/", async (req, res) => {
     const totalWeightKg = c * kg;
 
     // === 1차 룰 기반 ===
-    const { baseFee, cartonFee, transportFee, ruleAdjRate, ruleFee } =
-      calcRuleFee({
-        workQty: w,
-        cartonQty: c,
-        totalWeightKg,
-        workLocation,
-        productType,
-        urgency,
-        memo,
-      });
+    const {
+      baseFee,
+      cartonFee,
+      transportFee,
+      ruleAdjRate,
+      ruleFee: ruleFeeRaw,
+    } = calcRuleFee({
+      workQty: w,
+      cartonQty: c,
+      totalWeightKg,
+      workLocation,
+      productType,
+      urgency,
+      memo,
+    });
+
+    let ruleFee = ruleFeeRaw;
+    const notices = [];
+
+    // 1) 창고 위치가 인천항이 아닌 경우: 교통비 안내
+    if (!/인천항/.test(workLocation)) {
+      notices.push("교통비가 발생할 수 있습니다.");
+    }
+
+    // 2) 작업 방식이 박음질인 경우: 견적 2배 및 안내문구
+    const method = (workMethod || "").trim();
+    const isSewing =
+      method === "박음질" || /박음질/.test(method) || /봉제|재봉/.test(method);
+
+    if (isSewing) {
+      ruleFee = Math.round(ruleFee * 2); // 기존 룰 견적의 약 2배
+      notices.push("미싱 사용료 별도 발생");
+    }
 
     // === 2차 AI 조정 ===
     const aiInput = {
@@ -220,6 +246,9 @@ router.post("/", async (req, res) => {
       baseFee,
       cartonFee,
       memo,
+      workLocation,
+      productType,
+      workMethod: method,
     };
 
     let aiAdjRate = 0;
@@ -247,6 +276,7 @@ router.post("/", async (req, res) => {
       totalWeightKg,
       workLocation,
       productType,
+      workMethod: method,
       urgency,
       refInfo,
       contact: {
@@ -255,7 +285,7 @@ router.post("/", async (req, res) => {
         email: contactEmail,
       },
       memo,
-      attachmentUrl: "",
+      notices,
       fees: {
         baseFee,
         cartonFee,
@@ -272,55 +302,12 @@ router.post("/", async (req, res) => {
 
     console.log("Estimate saved:", doc._id.toString());
 
-    // === 이메일 HTML ===
-    const html = `
-      <h2>새로운 AI 자동 견적 요청이 접수되었습니다</h2>
-
-      <h3>고객 정보</h3>
-      <p><b>담당자명:</b> ${contactName}</p>
-      <p><b>연락처:</b> ${contactPhone}</p>
-      <p><b>이메일:</b> ${contactEmail}</p>
-
-      <h3>작업 정보</h3>
-      <p><b>작업 수량:</b> ${w.toLocaleString()} EA</p>
-      <p><b>카톤 수량:</b> ${c.toLocaleString()} CTN</p>
-      <p><b>카톤당 무게:</b> ${kg} kg</p>
-      <p><b>총 중량:</b> ${totalWeightKg.toLocaleString()} kg</p>
-      <p><b>작업 위치:</b> ${workLocation}</p>
-      <p><b>제품 종류:</b> ${productType || "(미입력)"}</p>
-      <p><b>BL번호/참고:</b> ${refInfo || "(미입력)"}</p>
-      <p><b>메모:</b> ${memo || "(없음)"}</p>
-
-      <h3>AI 자동견적 결과 (부가세 별도)</h3>
-      <p><b>기본 작업비:</b> ${baseFee.toLocaleString()}원</p>
-      <p><b>카톤비:</b> ${cartonFee.toLocaleString()}원</p>
-      <p><b>교통비(경기권 선택 시):</b> ${transportFee.toLocaleString()}원</p>
-      <p><b>룰 조정률:</b> ${(ruleAdjRate * 100).toFixed(1)}%</p>
-      <p><b>AI 조정률:</b> ${(aiAdjRate * 100).toFixed(1)}%</p>
-      <p><b>합산 조정률:</b> ${(totalAdjRate * 100).toFixed(1)}%</p>
-      <p><b>총 견적 비용(부가세 별도):</b> ${totalFee.toLocaleString()}원</p>
-      <p><b>작업 소요일:</b> 약 ${leadTimeDays}일</p>
-
-      <p style="color:#666;">
-       ※ 경기권 작업은 기본 교통비 10만원이 포함되며, 작업 인원에 따라 비용이 추가될 수 있습니다(현장 확인 후 최종 확정).
-      </p>
-
-      <h3>AI 의견</h3>
-      <p>${aiComment || "현재 AI 추가 조정 없이 기본 단가만 적용되었습니다."}</p>
-
-      <hr />
-      <p>플레오 보수작업 자동견적 시스템</p>
-    `;
-
-    // === 메일 발송 ===
-    const to = process.env.ESTIMATE_MAIL_TO || process.env.SMTP_USER;
-    const subject = "📌 새로운 AI 자동 견적 요청이 도착했습니다";
-
+    // === 카카오 알림 (관리자/사장님에게 알림 보내기) ===
+    // 필요 시 ../lib/kakaoAdminMemo.js 에서 구현한 함수가 호출됩니다.
     try {
-      const mailRes = await sendEstimateMail(to, subject, html);
-      console.log("[mail] send result:", mailRes);
-    } catch (emailErr) {
-      console.error("📧 이메일 오류:", emailErr);
+      await sendKakaoAdminMemo(doc);
+    } catch (kakaoErr) {
+      console.error("Kakao send error:", kakaoErr);
     }
 
     return res.json({
@@ -337,6 +324,7 @@ router.post("/", async (req, res) => {
         totalFee,
         leadTimeDays,
         aiComment,
+        notices,
       },
     });
   } catch (err) {

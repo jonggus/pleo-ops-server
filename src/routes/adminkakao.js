@@ -11,10 +11,11 @@ const {
   KAKAO_REDIRECT_URI,
 } = process.env;
 
-const TOKEN_URL = "https://kauth.kakao.com/oauth/token";
+const TOKEN_URL =
+  process.env.KAKAO_TOKEN_ENDPOINT || "https://kauth.kakao.com/oauth/token";
 
 /**
- * 1) 관리자 로그인
+ * 1) 관리자 로그인 시작
  * 예: /admin/kakao/auth?role=owner
  */
 router.get("/auth", (req, res) => {
@@ -30,6 +31,7 @@ router.get("/auth", (req, res) => {
 
 /**
  * 2) 카카오 callback → Refresh Token 발급 → DB 저장
+ * Redirect URI: https://pleo-ops-server.onrender.com/admin/kakao/callback
  */
 router.get("/callback", async (req, res) => {
   const { code, state: role } = req.query;
@@ -41,8 +43,9 @@ router.get("/callback", async (req, res) => {
     const params = new URLSearchParams();
     params.append("grant_type", "authorization_code");
     params.append("client_id", KAKAO_REST_API_KEY);
-    if (KAKAO_CLIENT_SECRET)
+    if (KAKAO_CLIENT_SECRET) {
       params.append("client_secret", KAKAO_CLIENT_SECRET);
+    }
     params.append("redirect_uri", KAKAO_REDIRECT_URI);
     params.append("code", code);
 
@@ -51,10 +54,11 @@ router.get("/callback", async (req, res) => {
     });
 
     const refreshToken = tokenRes.data.refresh_token;
-    if (!refreshToken)
+    if (!refreshToken) {
       return res.status(500).send("Refresh Token 발급 실패");
+    }
 
-    // DB 저장: 이미 있으면 업데이트
+    // role 기준 upsert
     await AdminToken.findOneAndUpdate(
       { role },
       { refreshToken, updatedAt: new Date() },
@@ -72,7 +76,7 @@ router.get("/callback", async (req, res) => {
       </html>
     `);
   } catch (err) {
-    console.error(err.response?.data || err.message);
+    console.error("Kakao callback error:", err.response?.data || err.message);
     res.status(500).send("토큰 발급 오류");
   }
 });

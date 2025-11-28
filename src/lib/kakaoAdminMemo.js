@@ -1,28 +1,15 @@
 // src/lib/kakaoAdminMemo.js
 import axios from "axios";
-
-/**
- * 관리자(본인 + 사장님) 두 명에게 카카오톡 "나에게 보내기" 전송
- * 
- * 전제:
- * - 관리자 2명의 REFRESH TOKEN을 환경변수에 저장
- * - 서버는 카카오 액세스 토큰을 매번 REFRESH TOKEN 기반으로 재발급
- * - 메시지 전송은 "나에게 보내기" API 사용
- * 
- * 필요한 ENV:
- *   KAKAO_REST_API_KEY
- *   KAKAO_CLIENT_SECRET (설정했다면)
- *   KAKAO_ADMIN_REFRESH_1=xxxx
- *   KAKAO_ADMIN_REFRESH_2=xxxx
- */
+import AdminToken from "../models/AdminToken.js";
 
 const REST_API_KEY = process.env.KAKAO_REST_API_KEY;
 const CLIENT_SECRET = process.env.KAKAO_CLIENT_SECRET || "";
-const REFRESH_1 = process.env.KAKAO_ADMIN_REFRESH_1; // 관리자1
-const REFRESH_2 = process.env.KAKAO_ADMIN_REFRESH_2; // 관리자2
 
-const TOKEN_URL = "https://kauth.kakao.com/oauth/token";
-const SEND_URL = "https://kapi.kakao.com/v2/api/talk/memo/default/send";
+const TOKEN_URL =
+  process.env.KAKAO_TOKEN_ENDPOINT || "https://kauth.kakao.com/oauth/token";
+const SEND_URL =
+  process.env.KAKAO_MEMO_SEND_ENDPOINT ||
+  "https://kapi.kakao.com/v2/api/talk/memo/default/send";
 
 /**
  * REFRESH_TOKEN → ACCESS_TOKEN 재발급
@@ -46,7 +33,7 @@ async function getAccessToken(refreshToken) {
 }
 
 /**
- * 카카오톡 나에게 보내기 실행
+ * 카카오톡 나에게 보내기
  */
 async function sendKakaoMemo(accessToken, messageObject) {
   const params = new URLSearchParams();
@@ -63,30 +50,35 @@ async function sendKakaoMemo(accessToken, messageObject) {
 }
 
 /**
- * 메시지 템플릿 구성
+ * 메시지 템플릿 생성
  */
 function buildMessageTemplate(estimate) {
+  const totalFee = estimate.fees?.totalFee || 0;
+  const workQty = estimate.workQty || 0;
+  const cartonQty = estimate.cartonQty || 0;
+  const totalWeightKg = estimate.totalWeightKg || 0;
+
   return {
     object_type: "text",
     text: [
       "[플레오 AI 견적 도착]",
       "",
-      `고객명: ${estimate.contact.name}`,
-      `연락처: ${estimate.contact.phone}`,
-      `이메일: ${estimate.contact.email}`,
+      `고객명: ${estimate.contact?.name || "-"}`,
+      `연락처: ${estimate.contact?.phone || "-"}`,
+      `이메일: ${estimate.contact?.email || "-"}`,
       "",
-      `작업 위치: ${estimate.workLocation}`,
-      `작업 수량: ${estimate.workQty.toLocaleString()} EA`,
-      `카톤 수량: ${estimate.cartonQty.toLocaleString()} CTN`,
-      `총 중량: ${estimate.totalWeightKg.toLocaleString()} kg`,
-      "",
+      `작업 위치: ${estimate.workLocation || "-"}`,
       `작업 방식: ${estimate.workMethod || "-"}`,
       `제품 종류: ${estimate.productType || "-"}`,
       "",
-      `예상 견적: ${estimate.fees.totalFee.toLocaleString()}원`,
-      `예상 소요일: 약 ${estimate.leadTimeDays}일`,
+      `작업 수량: ${workQty.toLocaleString()} EA`,
+      `카톤 수량: ${cartonQty.toLocaleString()} CTN`,
+      `총 중량: ${totalWeightKg.toLocaleString()} kg`,
       "",
-      "※ 실제 금액은 담당자 확인 후 확정됩니다.",
+      `예상 견적: ${totalFee.toLocaleString()}원 (부가세 별도)`,
+      `예상 소요일: 약 ${estimate.leadTimeDays || "-"}일`,
+      "",
+      "※ 실제 금액은 담당자 확인 후 최종 확정됩니다.",
     ].join("\n"),
     link: {
       web_url: "https://xn--on3b27gxrdt6b.com",
@@ -97,27 +89,31 @@ function buildMessageTemplate(estimate) {
 }
 
 /**
- * === 메인 함수 ===
- * 견적 생성 후 estimate.js에서 sendKakaoAdminMemo(doc) 호출
+ * 메인: 관리자 모두에게 카카오톡 발송
  */
 export async function sendKakaoAdminMemo(estimate) {
   try {
-    if (!REFRESH_1 && !REFRESH_2) {
-      console.warn("카카오 관리자 토큰이 설정되지 않음 (REFRESH_1/2 없음)");
+    const admins = await AdminToken.find({});
+    if (!admins.length) {
+      console.warn("[KAKAO MEMO] 저장된 관리자 토큰이 없습니다.");
       return;
     }
 
-    const targets = [REFRESH_1, REFRESH_2].filter(Boolean);
     const template = buildMessageTemplate(estimate);
 
     await Promise.all(
-      targets.map(async (refreshToken, idx) => {
+      admins.map(async (admin, idx) => {
         try {
-          const accessToken = await getAccessToken(refreshToken);
+          const accessToken = await getAccessToken(admin.refreshToken);
           await sendKakaoMemo(accessToken, template);
-          console.log(`[KAKAO MEMO] 관리자${idx + 1} 전송 완료`);
+          console.log(
+            `[KAKAO MEMO] 관리자 ${admin.role || idx + 1} 전송 완료`
+          );
         } catch (err) {
-          console.error(`[KAKAO MEMO] 관리자${idx + 1} 오류:`, err.message);
+          console.error(
+            `[KAKAO MEMO] 관리자 ${admin.role || idx + 1} 오류:`,
+            err.response?.data || err.message
+          );
         }
       })
     );

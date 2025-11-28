@@ -302,6 +302,12 @@ router.post("/", async (req, res) => {
 
     console.log("Estimate saved:", doc._id.toString());
 
+    // 카카오 관리자 알림 (실패해도 응답은 그대로 반환)
+    sendKakaoAdminMemo(doc).catch((err) => {
+      console.error("Kakao memo send error:", err);
+    });
+
+
     // === 카카오 알림 (관리자/사장님에게 알림 보내기) ===
     // 필요 시 ../lib/kakaoAdminMemo.js 에서 구현한 함수가 호출됩니다.
     try {
